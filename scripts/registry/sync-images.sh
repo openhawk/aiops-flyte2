@@ -81,7 +81,7 @@ for source_ref in "${images[@]}"; do
   destination_ref="${source_ref#*/}"
   destination="docker://$REGISTRY_BACKEND/$destination_ref"
   printf 'Syncing %s -> %s/%s\n' "$source_ref" "$REGISTRY_BACKEND" "$destination_ref"
-  skopeo copy --all --retry-times 3 --dest-tls-verify=false \
+  skopeo copy --retry-times 3 --dest-tls-verify=false \
     "docker://$source_ref" "$destination"
   skopeo inspect --tls-verify=false "$destination" >/dev/null
 done

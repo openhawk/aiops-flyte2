@@ -30,7 +30,9 @@ syncs the curated image list, switches HAProxy, and restarts k3s one node at a
 time. The Registry is read-only outside the controlled image-sync window.
 
 The image list is maintained in `deploy/registry/images.txt`. Run the same
-deployment script after changing the list; the sync is idempotent.
+deployment script after changing the list; the sync is idempotent. Synchronization
+selects the cluster host platform (`linux/amd64`) so the installed `skopeo` does
+not attempt to copy unrelated multi-architecture attestation manifests.
 
 ## Verification
 
