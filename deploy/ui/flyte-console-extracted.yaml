@@ -123,8 +123,8 @@ spec:
         kubernetes.io/hostname: aione-flyte2
       containers:
         - name: flyte-console-extracted
-          image: flyte-console-extracted:latest
-          imagePullPolicy: Never
+          image: docker.ops.fzyun.io/flyte-console-extracted:latest
+          imagePullPolicy: IfNotPresent
           env:
             - name: NODE_ENV
               value: production

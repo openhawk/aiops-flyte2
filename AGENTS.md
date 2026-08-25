@@ -232,7 +232,7 @@ kubectl -n flyte set image deploy/flyte-binary flyte="docker.ops.fzyun.io/flyte-
 kubectl -n flyte rollout status deploy/flyte-binary --timeout=10m
 ```
 
-The backend and downloader use Registry-qualified immutable tags with `imagePullPolicy: IfNotPresent`, so workloads scheduled on any configured node can pull them from `docker.ops.fzyun.io`. Flyte control-plane pods, PostgreSQL, RustFS, and the source-built frontend remain pinned to `aione-flyte2`; RustFS uses a hostPath on that node, and the source-built frontend still uses its local image with `imagePullPolicy: Never`. Override `CONTROL_PLANE_NODE` only when the stateful data and local images have been migrated to the target node.
+The backend, downloader, and source-built frontend use Registry-qualified immutable tags with `imagePullPolicy: IfNotPresent`, so configured nodes can pull them from `docker.ops.fzyun.io`. Flyte control-plane pods, PostgreSQL, RustFS, and the source-built frontend remain pinned to `aione-flyte2` by default so they do not consume GPU-node resources; RustFS additionally depends on a hostPath on that node. Override `CONTROL_PLANE_NODE` only when the stateful data has been migrated to the target node.
 
 If a new pod is stuck before init containers with `FailedCreatePodSandBox` for `rancher/mirrored-pause:3.6`, pull the pause image directly into k3s containerd:
 
@@ -297,8 +297,8 @@ Current frontend Kubernetes deployment:
 ```text
 Deployment:      flyte-console-extracted
 Service:         flyte-console-extracted
-Image:           flyte-console-extracted:latest
-ImagePullPolicy: Never
+Image:           docker.ops.fzyun.io/flyte-console-extracted:main-<commit>
+ImagePullPolicy: IfNotPresent
 Container port:  8080
 NodePort:        30081
 ```

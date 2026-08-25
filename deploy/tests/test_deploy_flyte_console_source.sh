@@ -38,6 +38,9 @@ assert_contains "REMOTE_DIR='/opt/aiops-flyte2'"
 assert_contains "CONSOLE_URL='http://172.19.66.218:30081/v2/projects'"
 assert_contains "KUBECONFIG_PATH='/etc/rancher/k3s/flyte-admin.yaml'"
 assert_contains "EXPECTED_COMMIT='0123456789abcdef'"
+assert_contains "PUBLIC_REGISTRY='docker.ops.fzyun.io'"
+assert_contains "REGISTRY_BACKEND='172.19.66.224:30000'"
+assert_contains "IMAGE_REPOSITORY='docker.ops.fzyun.io/flyte-console-extracted'"
 assert_contains 'export KUBECONFIG="$KUBECONFIG_PATH"'
 assert_contains 'pypi.fzyun.io,registry.npmmirror.com'
 assert_contains 'kubectl get --raw=/readyz'
@@ -58,10 +61,16 @@ assert_contains 'sudo systemctl restart buildkit-k3s.service'
 assert_not_contains 'sudo systemctl restart buildkit-k3s.service'$'\n''  wait_for_buildkit'
 assert_contains 'NERDCTL=(sudo env HTTP_PROXY="${HTTP_PROXY:-}"'
 assert_contains '/usr/local/bin/nerdctl --address /run/k3s/containerd/containerd.sock --namespace k8s.io)'
-assert_contains '"${NERDCTL[@]}" build "${build_proxy_args[@]}" -f flyte_console/Dockerfile -t "flyte-console-source:${COMMIT}" -t flyte-console-extracted:latest flyte_console'
+assert_contains 'IMAGE_TAG="${IMAGE_TAG:-main-${COMMIT}}"'
+assert_contains '-t "${IMAGE_REPOSITORY}:${IMAGE_TAG}"'
+assert_contains '-t "${IMAGE_REPOSITORY}:latest"'
 assert_contains 'k3s ctr -n k8s.io images ls | grep -E'
-assert_contains 'kubectl apply -f deploy/ui/flyte-console-extracted.yaml'
-assert_contains 'kubectl -n "$NAMESPACE" rollout restart deploy/flyte-console-extracted'
+assert_contains 'bash scripts/registry/push-local-images.sh'
+assert_contains '"${IMAGE_REPOSITORY}:${IMAGE_TAG}"'
+assert_contains '"${IMAGE_REPOSITORY}:latest"'
+assert_contains 'sed "s|image: docker.ops.fzyun.io/flyte-console-extracted:latest|image: ${IMAGE_REPOSITORY}:${IMAGE_TAG}|"'
+assert_contains 'deploy/ui/flyte-console-extracted.yaml | kubectl apply -f -'
+assert_not_contains 'rollout restart deploy/flyte-console-extracted'
 assert_contains 'kubectl -n "$NAMESPACE" rollout status deploy/flyte-console-extracted --timeout=180s'
 assert_contains 'curl_with_retries "$CONSOLE_URL"'
 assert_contains 'for attempt in {1..10}; do'

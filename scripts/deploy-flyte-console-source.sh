@@ -5,6 +5,10 @@ REMOTE_HOST="${REMOTE_HOST:-aione-flyte2}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/aiops-flyte2}"
 NAMESPACE="${NAMESPACE:-flyte}"
 CONSOLE_URL="${CONSOLE_URL:-http://172.19.66.218:30081/v2/projects}"
+PUBLIC_REGISTRY="${PUBLIC_REGISTRY:-docker.ops.fzyun.io}"
+REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/flyte-console-extracted}"
+IMAGE_TAG="${IMAGE_TAG:-}"
 NERDCTL_VERSION="${NERDCTL_VERSION:-2.3.3}"
 PROXY_URL="${PROXY_URL:-}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-/root/.kube/config}"
@@ -16,10 +20,14 @@ shell_quote() {
 }
 
 remote_env() {
-  printf "REMOTE_DIR=%s NAMESPACE=%s CONSOLE_URL=%s NERDCTL_VERSION=%s PROXY_URL=%s KUBECONFIG_PATH=%s EXPECTED_COMMIT=%s" \
+  printf "REMOTE_DIR=%s NAMESPACE=%s CONSOLE_URL=%s PUBLIC_REGISTRY=%s REGISTRY_BACKEND=%s IMAGE_REPOSITORY=%s IMAGE_TAG=%s NERDCTL_VERSION=%s PROXY_URL=%s KUBECONFIG_PATH=%s EXPECTED_COMMIT=%s" \
     "$(shell_quote "$REMOTE_DIR")" \
     "$(shell_quote "$NAMESPACE")" \
     "$(shell_quote "$CONSOLE_URL")" \
+    "$(shell_quote "$PUBLIC_REGISTRY")" \
+    "$(shell_quote "$REGISTRY_BACKEND")" \
+    "$(shell_quote "$IMAGE_REPOSITORY")" \
+    "$(shell_quote "$IMAGE_TAG")" \
     "$(shell_quote "$NERDCTL_VERSION")" \
     "$(shell_quote "$PROXY_URL")" \
     "$(shell_quote "$KUBECONFIG_PATH")" \
@@ -193,6 +201,7 @@ if [[ "$(git rev-parse HEAD)" != "$EXPECTED_COMMIT" ]]; then
   exit 1
 fi
 COMMIT="$(git rev-parse --short HEAD)"
+IMAGE_TAG="${IMAGE_TAG:-main-${COMMIT}}"
 ensure_buildkit_k3s
 
 export BUILDKIT_HOST="${BUILDKIT_HOST:-unix:///run/buildkit/buildkitd.sock}"
@@ -209,11 +218,19 @@ if [[ -n "${PROXY_URL:-}" ]]; then
   )
 fi
 
-"${NERDCTL[@]}" build "${build_proxy_args[@]}" -f flyte_console/Dockerfile -t "flyte-console-source:${COMMIT}" -t flyte-console-extracted:latest flyte_console
-sudo k3s ctr -n k8s.io images ls | grep -E "flyte-console-source:${COMMIT}|flyte-console-extracted:latest"
+"${NERDCTL[@]}" build "${build_proxy_args[@]}" -f flyte_console/Dockerfile \
+  -t "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
+  -t "${IMAGE_REPOSITORY}:latest" \
+  flyte_console
+sudo k3s ctr -n k8s.io images ls | grep -E "${IMAGE_REPOSITORY}:(${IMAGE_TAG}|latest)"
 
-kubectl apply -f deploy/ui/flyte-console-extracted.yaml
-kubectl -n "$NAMESPACE" rollout restart deploy/flyte-console-extracted
+PUBLIC_REGISTRY="$PUBLIC_REGISTRY" REGISTRY_BACKEND="$REGISTRY_BACKEND" \
+  bash scripts/registry/push-local-images.sh \
+    "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
+    "${IMAGE_REPOSITORY}:latest"
+
+sed "s|image: docker.ops.fzyun.io/flyte-console-extracted:latest|image: ${IMAGE_REPOSITORY}:${IMAGE_TAG}|" \
+  deploy/ui/flyte-console-extracted.yaml | kubectl apply -f -
 kubectl -n "$NAMESPACE" rollout status deploy/flyte-console-extracted --timeout=180s
 kubectl -n "$NAMESPACE" get pod -l app=flyte-console-extracted -o wide
 kubectl -n "$NAMESPACE" logs deploy/flyte-console-extracted --tail=80
