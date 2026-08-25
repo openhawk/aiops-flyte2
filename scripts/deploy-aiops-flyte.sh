@@ -6,6 +6,7 @@ REMOTE_DIR="${REMOTE_DIR:-/opt/aiops-flyte2}"
 REMOTE_BRANCH="${REMOTE_BRANCH:-main}"
 NAMESPACE="${NAMESPACE:-flyte}"
 RELEASE="${RELEASE:-flyte-devbox}"
+CONTROL_PLANE_NODE="${CONTROL_PLANE_NODE:-aione-flyte2}"
 PUBLIC_REGISTRY="${PUBLIC_REGISTRY:-docker.ops.fzyun.io}"
 REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/flyte-binary-v2}"
@@ -29,12 +30,13 @@ shell_quote() {
 }
 
 remote_env() {
-  printf "REMOTE_HOST=%s REMOTE_DIR=%s REMOTE_BRANCH=%s NAMESPACE=%s RELEASE=%s PUBLIC_REGISTRY=%s REGISTRY_BACKEND=%s IMAGE_REPOSITORY=%s DOWNLOADER_IMAGE_REPOSITORY=%s POSTGRES_IMAGE_REPOSITORY=%s CONSOLE_IMAGE_REPOSITORY=%s RUSTFS_IMAGE_REPOSITORY=%s BUSYBOX_IMAGE_REPOSITORY=%s IMAGE_TAG=%s DOWNLOADER_IMAGE_TAG=%s IMAGE_TAG_PREFIX=%s IMAGE_TAG_KEEP=%s EXPECTED_COMMIT=%s NERDCTL_VERSION=%s PROXY_URL=%s KUBECONFIG_PATH=%s" \
+  printf "REMOTE_HOST=%s REMOTE_DIR=%s REMOTE_BRANCH=%s NAMESPACE=%s RELEASE=%s CONTROL_PLANE_NODE=%s PUBLIC_REGISTRY=%s REGISTRY_BACKEND=%s IMAGE_REPOSITORY=%s DOWNLOADER_IMAGE_REPOSITORY=%s POSTGRES_IMAGE_REPOSITORY=%s CONSOLE_IMAGE_REPOSITORY=%s RUSTFS_IMAGE_REPOSITORY=%s BUSYBOX_IMAGE_REPOSITORY=%s IMAGE_TAG=%s DOWNLOADER_IMAGE_TAG=%s IMAGE_TAG_PREFIX=%s IMAGE_TAG_KEEP=%s EXPECTED_COMMIT=%s NERDCTL_VERSION=%s PROXY_URL=%s KUBECONFIG_PATH=%s" \
     "$(shell_quote "$REMOTE_HOST")" \
     "$(shell_quote "$REMOTE_DIR")" \
     "$(shell_quote "$REMOTE_BRANCH")" \
     "$(shell_quote "$NAMESPACE")" \
     "$(shell_quote "$RELEASE")" \
+    "$(shell_quote "$CONTROL_PLANE_NODE")" \
     "$(shell_quote "$PUBLIC_REGISTRY")" \
     "$(shell_quote "$REGISTRY_BACKEND")" \
     "$(shell_quote "$IMAGE_REPOSITORY")" \
@@ -445,6 +447,8 @@ spec:
       labels:
         app: postgresql
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: ${CONTROL_PLANE_NODE}
       containers:
         - name: postgresql
           image: ${POSTGRES_IMAGE_REPOSITORY}:17
@@ -487,6 +491,7 @@ helm upgrade --install "$RELEASE" charts/flyte-devbox \
   --set flyte-binary.deployment.image.repository="$IMAGE_REPOSITORY" \
   --set flyte-binary.deployment.image.tag="$IMAGE_TAG" \
   --set flyte-binary.deployment.image.pullPolicy=IfNotPresent \
+  --set "flyte-binary.deployment.extraPodSpec.nodeSelector.kubernetes\\.io/hostname=$CONTROL_PLANE_NODE" \
   --set flyte-binary.deployment.extraEnvVars[0].name=AIONE_DOWNLOADER_IMAGE \
   --set flyte-binary.deployment.extraEnvVars[0].value="${DOWNLOADER_IMAGE_REPOSITORY}:${DOWNLOADER_IMAGE_TAG}" \
   --set flyte-binary.deployment.waitForDB.image.repository="$POSTGRES_IMAGE_REPOSITORY" \
@@ -495,6 +500,8 @@ helm upgrade --install "$RELEASE" charts/flyte-devbox \
   --set flyte-binary.console.image.repository="$CONSOLE_IMAGE_REPOSITORY" \
   --set flyte-binary.console.image.tag=latest \
   --set flyte-binary.console.image.pullPolicy=IfNotPresent \
+  --set "flyte-binary.console.nodeSelector.kubernetes\\.io/hostname=$CONTROL_PLANE_NODE" \
+  --set "rustfs.nodeSelector.kubernetes\\.io/hostname=$CONTROL_PLANE_NODE" \
   --set rustfs.image.repository="$RUSTFS_IMAGE_REPOSITORY" \
   --set rustfs.image.tag=1.0.0-alpha.94 \
   --set rustfs.image.rustfs.repository="$RUSTFS_IMAGE_REPOSITORY" \

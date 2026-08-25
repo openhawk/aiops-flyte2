@@ -26,6 +26,8 @@ flyte-binary:
       repository: docker.ops.fzyun.io/unionai-oss/flyteconsole-v2
       tag: latest
       pullPolicy: IfNotPresent
+    nodeSelector:
+      kubernetes.io/hostname: aione-flyte2
   configuration:
     # CoPilot ships inside the same registry-backed flyte-binary image
     # (at /bin/flyte-copilot), so point the sidecar at the matching release.
@@ -106,6 +108,9 @@ flyte-binary:
   clusterResourceTemplates:
     inlineConfigMap: '{{ include "flyte-devbox.clusterResourceTemplates.inlineConfigMap" . }}'
   deployment:
+    extraPodSpec:
+      nodeSelector:
+        kubernetes.io/hostname: aione-flyte2
     image:
       repository: docker.ops.fzyun.io/flyte-binary-v2
       tag: sandbox
@@ -151,6 +156,8 @@ flyte-binary:
 rustfs:
   enabled: true
   fullnameOverride: rustfs
+  nodeSelector:
+    kubernetes.io/hostname: aione-flyte2
   mode:
     standalone:
       enabled: true

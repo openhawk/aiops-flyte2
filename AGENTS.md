@@ -232,7 +232,7 @@ kubectl -n flyte set image deploy/flyte-binary flyte="docker.ops.fzyun.io/flyte-
 kubectl -n flyte rollout status deploy/flyte-binary --timeout=10m
 ```
 
-The backend and downloader use Registry-qualified immutable tags with `imagePullPolicy: IfNotPresent`, so workloads scheduled on any configured node can pull them from `docker.ops.fzyun.io`. The source-built frontend remains pinned to `aione-flyte2` and uses its local image with `imagePullPolicy: Never`.
+The backend and downloader use Registry-qualified immutable tags with `imagePullPolicy: IfNotPresent`, so workloads scheduled on any configured node can pull them from `docker.ops.fzyun.io`. Flyte control-plane pods, PostgreSQL, RustFS, and the source-built frontend remain pinned to `aione-flyte2`; RustFS uses a hostPath on that node, and the source-built frontend still uses its local image with `imagePullPolicy: Never`. Override `CONTROL_PLANE_NODE` only when the stateful data and local images have been migrated to the target node.
 
 If a new pod is stuck before init containers with `FailedCreatePodSandBox` for `rancher/mirrored-pause:3.6`, pull the pause image directly into k3s containerd:
 
