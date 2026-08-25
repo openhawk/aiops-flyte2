@@ -91,6 +91,72 @@ git status --short
 git diff --check
 ```
 
+## Cluster Registry Image Push And Pull
+
+The standalone cluster Registry runs in the `registry-system` namespace. Its
+public OCI endpoint is `https://docker.ops.fzyun.io`; opening the host root in a
+browser shows the read-only Joxit UI, while Docker and containerd use the `/v2/`
+API on the same host. The legacy Registry at
+`http://docker.ops.fzyun.io:5000` remains available for existing images.
+
+Pull an image directly from the new Registry with its mirrored repository path:
+
+```bash
+docker pull docker.ops.fzyun.io/nfd/node-feature-discovery:v0.18.3
+sudo k3s crictl pull docker.ops.fzyun.io/nfd/node-feature-discovery:v0.18.3
+```
+
+All k3s nodes also configure `docker.ops.fzyun.io` as the first mirror for
+`docker.io`, `registry.k8s.io`, `quay.io`, and `nvcr.io`. Workloads can therefore
+keep their original upstream image reference; for example, this pull tries the
+cluster Registry first:
+
+```bash
+sudo k3s crictl pull registry.k8s.io/nfd/node-feature-discovery:v0.18.3
+```
+
+The Registry has no login requirement, but it is intentionally read-only by
+default. The following address and commands are correct only while a controlled
+write window is open:
+
+```bash
+docker tag my-image:tag docker.ops.fzyun.io/my-project/my-image:tag
+docker push docker.ops.fzyun.io/my-project/my-image:tag
+```
+
+For upstream or commonly used images, add the fully qualified source image to
+`deploy/registry/images.txt`, commit and push the change, then run
+`scripts/deploy-cluster-registry.sh`. Its sync flow switches the Registry to
+`registry-config-rw`, copies and verifies the images, and restores
+`registry-config-ro` even when synchronization fails. Existing destination
+manifests are skipped unless `FORCE_SYNC=1` is explicitly set.
+
+For an exceptional direct Docker push, open the write window from a host with
+cluster-admin access, wait for the Registry rollout, perform the tag and push,
+and immediately restore read-only mode:
+
+```bash
+kubectl -n registry-system patch deployment registry --type=strategic \
+  -p '{"spec":{"template":{"spec":{"volumes":[{"name":"config","configMap":{"name":"registry-config-rw"}}]}}}}'
+kubectl -n registry-system rollout status deployment/registry --timeout=180s
+
+docker tag my-image:tag docker.ops.fzyun.io/my-project/my-image:tag
+docker push docker.ops.fzyun.io/my-project/my-image:tag
+
+kubectl -n registry-system patch deployment registry --type=strategic \
+  -p '{"spec":{"template":{"spec":{"volumes":[{"name":"config","configMap":{"name":"registry-config-ro"}}]}}}}'
+kubectl -n registry-system rollout status deployment/registry --timeout=180s
+```
+
+Do not leave this unauthenticated public Registry writable. If routine direct
+pushes are required, add authentication and authorization before changing the
+default operating mode. Verify the API and catalog after a sync or push:
+
+```bash
+curl -fsS https://docker.ops.fzyun.io/v2/
+curl -fsS https://docker.ops.fzyun.io/v2/_catalog
+```
+
 ## Backend Build And Deployment
 
 Remote deployment steps must start from committed code already pushed to `origin/main`; update the remote checkout with `git pull --ff-only` only.
