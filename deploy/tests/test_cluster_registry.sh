@@ -85,6 +85,8 @@ done
 assert_file_contains "$SYNC_SCRIPT" 'registry-config-rw'
 assert_file_contains "$SYNC_SCRIPT" 'registry-config-ro'
 assert_file_contains "$SYNC_SCRIPT" 'trap restore_read_only EXIT'
+assert_file_contains "$SYNC_SCRIPT" 'FORCE_SYNC="${FORCE_SYNC:-0}"'
+assert_file_contains "$SYNC_SCRIPT" 'Skipping existing image'
 assert_file_contains "$SYNC_SCRIPT" 'skopeo copy --retry-times 3'
 assert_file_not_contains "$SYNC_SCRIPT" 'skopeo copy --all'
 assert_file_contains "$SYNC_SCRIPT" '--dest-tls-verify=false'

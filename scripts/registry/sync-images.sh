@@ -7,6 +7,7 @@ DEPLOYMENT="${DEPLOYMENT:-registry}"
 REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
 IMAGE_LIST="${IMAGE_LIST:-$ROOT_DIR/deploy/registry/images.txt}"
 PROXY_URL="${PROXY_URL:-}"
+FORCE_SYNC="${FORCE_SYNC:-0}"
 
 if [[ ! -r "$IMAGE_LIST" ]]; then
   printf 'registry image list is not readable: %s\n' "$IMAGE_LIST" >&2
@@ -80,6 +81,10 @@ trap restore_read_only EXIT
 for source_ref in "${images[@]}"; do
   destination_ref="${source_ref#*/}"
   destination="docker://$REGISTRY_BACKEND/$destination_ref"
+  if [[ "$FORCE_SYNC" != "1" ]] && skopeo inspect --tls-verify=false "$destination" >/dev/null 2>&1; then
+    printf 'Skipping existing image %s/%s\n' "$REGISTRY_BACKEND" "$destination_ref"
+    continue
+  fi
   printf 'Syncing %s -> %s/%s\n' "$source_ref" "$REGISTRY_BACKEND" "$destination_ref"
   skopeo copy --retry-times 3 --dest-tls-verify=false \
     "docker://$source_ref" "$destination"

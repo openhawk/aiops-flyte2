@@ -38,7 +38,9 @@ time. The Registry is read-only outside the controlled image-sync window.
 The image list is maintained in `deploy/registry/images.txt`. Run the same
 deployment script after changing the list; the sync is idempotent. Synchronization
 selects the cluster host platform (`linux/amd64`) so the installed `skopeo` does
-not attempt to copy unrelated multi-architecture attestation manifests.
+not attempt to copy unrelated multi-architecture attestation manifests. Existing
+target manifests are skipped by default; set `FORCE_SYNC=1` when an upstream tag
+must be deliberately refreshed.
 
 ## Verification
 
