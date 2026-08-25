@@ -11,6 +11,7 @@ EXPECTED_COMMIT="${EXPECTED_COMMIT:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
 PROXY_URL="${PROXY_URL:-http://172.19.210.24:7897}"
 DRY_RUN="${DRY_RUN:-0}"
 REGISTRY_IMAGE="docker.ops.fzyun.io/library/registry:3.1.1@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33"
+REGISTRY_SOURCE="docker.fzyun.io/library/registry:3.1.1"
 
 SSH_BIN="${SSH_BIN:-ssh}"
 for required in "$SSH_BIN" git; do
@@ -46,7 +47,8 @@ remote_update="cd '$REMOTE_DIR' && git pull --ff-only origin '$REMOTE_BRANCH' &&
 
 for host in aiops-hawk1 aiops-hawk2 aiops-hawk3; do
   printf 'Preloading the pinned registry image on %s.\n' "$host"
-  "$SSH_BIN" "$host" "sudo k3s ctr -n k8s.io images pull '$REGISTRY_IMAGE' >/dev/null && sudo k3s ctr -n k8s.io images ls | grep 'docker.ops.fzyun.io/library/registry:3.1.1'"
+  "$SSH_BIN" "$host" \
+    "sudo k3s ctr -n k8s.io images pull '$REGISTRY_SOURCE' >/dev/null && sudo k3s ctr -n k8s.io images tag --force '$REGISTRY_SOURCE' '${REGISTRY_IMAGE%@*}' '$REGISTRY_IMAGE' && sudo k3s ctr -n k8s.io images ls | grep 'docker.ops.fzyun.io/library/registry:3.1.1'"
 done
 
 "$SSH_BIN" "$REMOTE_HOST" \

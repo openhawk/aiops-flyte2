@@ -7,8 +7,7 @@ STAGE="${STAGE:-all}"
 NAMESPACE="${NAMESPACE:-registry-system}"
 REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
 PROXY_URL="${PROXY_URL:-}"
-REGISTRY_SOURCE="docker.io/library/registry:3.1.1"
-REGISTRY_PUBLIC="docker.ops.fzyun.io/library/registry:3.1.1"
+REGISTRY_SOURCE="docker.fzyun.io/library/registry:3.1.1"
 REGISTRY_DIGEST="sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33"
 
 cd "$ROOT_DIR"
@@ -33,20 +32,13 @@ export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost,10.0.0.0/8,172.16.0.0/12,192.16
 export no_proxy="$NO_PROXY"
 
 bootstrap_registry_image() {
-  local current_digest=""
-  current_digest="$(skopeo inspect "docker://$REGISTRY_PUBLIC" 2>/dev/null | sed -n 's/.*"Digest": "\([^"]*\)".*/\1/p' || true)"
-  if [[ "$current_digest" == "$REGISTRY_DIGEST" ]]; then
-    printf 'Bootstrap registry image already exists at %s@%s\n' "$REGISTRY_PUBLIC" "$REGISTRY_DIGEST"
-    return 0
-  fi
-  printf 'Copying bootstrap registry image to the existing HTTPS registry.\n'
-  skopeo copy --all --retry-times 3 \
-    "docker://$REGISTRY_SOURCE" "docker://$REGISTRY_PUBLIC"
-  current_digest="$(skopeo inspect "docker://$REGISTRY_PUBLIC" | sed -n 's/.*"Digest": "\([^"]*\)".*/\1/p')"
+  local current_digest
+  current_digest="$(skopeo inspect "docker://$REGISTRY_SOURCE" | sed -n 's/.*"Digest": "\([^"]*\)".*/\1/p')"
   if [[ "$current_digest" != "$REGISTRY_DIGEST" ]]; then
     printf 'unexpected bootstrap registry digest: %s\n' "$current_digest" >&2
     exit 1
   fi
+  printf 'Verified bootstrap registry image at %s@%s\n' "$REGISTRY_SOURCE" "$REGISTRY_DIGEST"
 }
 
 apply_registry() {
