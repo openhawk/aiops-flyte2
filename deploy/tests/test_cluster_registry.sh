@@ -79,6 +79,7 @@ assert_file_contains "$CLUSTER_SCRIPT" 'kubectl label node aiops-hawk1'
 assert_file_contains "$CLUSTER_SCRIPT" 'kubectl apply -f deploy/registry/registry.yaml'
 assert_file_contains "$CLUSTER_SCRIPT" 'docker.fzyun.io/library/registry:3.1.1'
 assert_file_contains "$DEPLOY_SCRIPT" "images tag --force"
+assert_file_contains "$DEPLOY_SCRIPT" 'docker.ops.fzyun.io/library/registry@sha256:'
 assert_file_contains "$GATEWAY_SCRIPT" 'acl host_docker_ops hdr(host) -i docker.ops.fzyun.io'
 assert_file_contains "$GATEWAY_SCRIPT" 'server k3s_registry 172.19.66.224:30000 check'
 assert_file_contains "$GATEWAY_SCRIPT" 'http://docker.ops.fzyun.io:5000/v2/'
