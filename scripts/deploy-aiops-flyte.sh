@@ -116,7 +116,17 @@ ensure_k3s_registries() {
 mirrors:
   docker.io:
     endpoint:
+      - "https://docker.ops.fzyun.io"
       - "https://docker.fzyun.io"
+  registry.k8s.io:
+    endpoint:
+      - "https://docker.ops.fzyun.io"
+  quay.io:
+    endpoint:
+      - "https://docker.ops.fzyun.io"
+  nvcr.io:
+    endpoint:
+      - "https://docker.ops.fzyun.io"
   "docker.ops.fzyun.io:5000":
     endpoint:
       - "http://docker.ops.fzyun.io:5000"
