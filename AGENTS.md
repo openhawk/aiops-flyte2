@@ -131,6 +131,13 @@ For upstream or commonly used images, add the fully qualified source image to
 `registry-config-ro` even when synchronization fails. Existing destination
 manifests are skipped unless `FORCE_SYNC=1` is explicitly set.
 
+Project-built release images use the same controlled write-window model. The
+backend deployment script calls `scripts/registry/push-local-images.sh` after
+BuildKit finishes, pushes Registry-qualified commit tags through the internal
+Registry service, verifies them through the public endpoint, and restores
+`registry-config-ro` before Helm deployment begins. The sync and local-push
+scripts share a lock so only one write window can run at a time.
+
 For an exceptional direct Docker push, open the write window from a host with
 cluster-admin access, wait for the Registry rollout, perform the tag and push,
 and immediately restore read-only mode:
@@ -170,7 +177,7 @@ git pull --ff-only origin main
 git log -1 --oneline
 ```
 
-For full backend deployment, including k3s, Helm dependencies, local images, PostgreSQL, RustFS, and Flyte binary:
+For full backend deployment, including k3s, Helm dependencies, Registry-backed images, PostgreSQL, RustFS, and Flyte binary:
 
 ```powershell
 $repoRoot = (git rev-parse --show-toplevel).Trim()
@@ -187,13 +194,13 @@ PROXY_URL=http://172.19.210.24:7897 bash scripts/deploy-aiops-flyte.sh
 The full deployment script builds and deploys:
 
 ```text
-Image:     flyte-binary-v2:main-<commit>
+Image:     docker.ops.fzyun.io/flyte-binary-v2:main-<commit>
 Release:   flyte-devbox
 Namespace: flyte
 Ingress:   http://172.19.66.218:30080
 ```
 
-By default, `scripts/deploy-aiops-flyte.sh` generates `IMAGE_TAG=main-$(git rev-parse --short HEAD)`. It deploys both `flyte-binary` and the Flyte co-pilot image setting with that same tag. It keeps only the latest three backend release images matching `flyte-binary-v2:main-*` in k3s containerd. Override `IMAGE_TAG` only for an explicit one-off deployment.
+By default, `scripts/deploy-aiops-flyte.sh` generates `IMAGE_TAG=main-$(git rev-parse --short HEAD)`. It builds the backend and downloader with that tag, opens a controlled Registry write window through `scripts/registry/push-local-images.sh`, pushes both images, restores the Registry to read-only mode, and deploys the same immutable tags. It keeps only the latest three backend release images in the build node's k3s containerd. Override `IMAGE_TAG` only for an explicit one-off deployment.
 
 The deployment scripts use nerdctl and BuildKit directly against k3s containerd:
 
@@ -218,14 +225,14 @@ IMAGE_TAG="main-${COMMIT}"
 export BUILDKIT_HOST=unix:///run/buildkit/buildkitd.sock
 nerdctl --address /run/k3s/containerd/containerd.sock --namespace k8s.io build \
   -f Dockerfile \
-  -t "flyte-binary-v2:${IMAGE_TAG}" \
+  -t "docker.ops.fzyun.io/flyte-binary-v2:${IMAGE_TAG}" \
   .
-k3s ctr images ls | grep "flyte-binary-v2:${IMAGE_TAG}"
-kubectl -n flyte set image deploy/flyte-binary flyte="flyte-binary-v2:${IMAGE_TAG}"
+bash scripts/registry/push-local-images.sh "docker.ops.fzyun.io/flyte-binary-v2:${IMAGE_TAG}"
+kubectl -n flyte set image deploy/flyte-binary flyte="docker.ops.fzyun.io/flyte-binary-v2:${IMAGE_TAG}"
 kubectl -n flyte rollout status deploy/flyte-binary --timeout=10m
 ```
 
-The k3s deployment uses local images with `imagePullPolicy: Never`. Build backend and source-built frontend images with nerdctl directly into the k3s `k8s.io` containerd namespace, then verify the exact tag with `k3s ctr images ls` before waiting on rollout. If a pod reports `ErrImageNeverPull`, first re-check that the exact tag exists in `k3s ctr -n k8s.io images ls`; an image existing only in Docker is not enough.
+The backend and downloader use Registry-qualified immutable tags with `imagePullPolicy: IfNotPresent`, so workloads scheduled on any configured node can pull them from `docker.ops.fzyun.io`. The source-built frontend remains pinned to `aione-flyte2` and uses its local image with `imagePullPolicy: Never`.
 
 If a new pod is stuck before init containers with `FailedCreatePodSandBox` for `rancher/mirrored-pause:3.6`, pull the pause image directly into k3s containerd:
 

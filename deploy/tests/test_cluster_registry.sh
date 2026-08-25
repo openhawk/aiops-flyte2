@@ -7,12 +7,13 @@ UI_MANIFEST="$ROOT_DIR/deploy/registry/registry-ui.yaml"
 IMAGE_LIST="$ROOT_DIR/deploy/registry/images.txt"
 DEPLOY_SCRIPT="$ROOT_DIR/scripts/deploy-cluster-registry.sh"
 SYNC_SCRIPT="$ROOT_DIR/scripts/registry/sync-images.sh"
+PUSH_SCRIPT="$ROOT_DIR/scripts/registry/push-local-images.sh"
 CLUSTER_SCRIPT="$ROOT_DIR/scripts/registry/deploy-on-cluster.sh"
 GATEWAY_SCRIPT="$ROOT_DIR/scripts/registry/configure-gateway.sh"
 NODE_SCRIPT="$ROOT_DIR/scripts/registry/configure-node.sh"
 REPAIR_SCRIPT="$ROOT_DIR/scripts/registry/repair-aione-gpu2.sh"
 
-for file in "$MANIFEST" "$UI_MANIFEST" "$IMAGE_LIST" "$DEPLOY_SCRIPT" "$SYNC_SCRIPT" \
+for file in "$MANIFEST" "$UI_MANIFEST" "$IMAGE_LIST" "$DEPLOY_SCRIPT" "$SYNC_SCRIPT" "$PUSH_SCRIPT" \
   "$CLUSTER_SCRIPT" "$GATEWAY_SCRIPT" "$NODE_SCRIPT" "$REPAIR_SCRIPT"; do
   if [[ ! -f "$file" ]]; then
     printf 'required cluster Registry file is missing: %s\n' "$file" >&2
@@ -88,8 +89,15 @@ assert_file_contains "$SYNC_SCRIPT" 'trap restore_read_only EXIT'
 assert_file_contains "$SYNC_SCRIPT" 'FORCE_SYNC="${FORCE_SYNC:-0}"'
 assert_file_contains "$SYNC_SCRIPT" 'Skipping existing image'
 assert_file_contains "$SYNC_SCRIPT" 'skopeo copy --retry-times 3'
+assert_file_contains "$SYNC_SCRIPT" 'flock 9'
 assert_file_not_contains "$SYNC_SCRIPT" 'skopeo copy --all'
 assert_file_contains "$SYNC_SCRIPT" '--dest-tls-verify=false'
+assert_file_contains "$PUSH_SCRIPT" 'registry-config-rw'
+assert_file_contains "$PUSH_SCRIPT" 'registry-config-ro'
+assert_file_contains "$PUSH_SCRIPT" 'trap restore_read_only EXIT'
+assert_file_contains "$PUSH_SCRIPT" 'flock 9'
+assert_file_contains "$PUSH_SCRIPT" '"${NERDCTL[@]}" push --quiet "$internal_ref"'
+assert_file_contains "$PUSH_SCRIPT" 'skopeo inspect "docker://$public_ref"'
 assert_file_contains "$CLUSTER_SCRIPT" 'kubectl label node aiops-hawk1'
 assert_file_contains "$CLUSTER_SCRIPT" 'kubectl apply -f deploy/registry/registry.yaml'
 assert_file_contains "$CLUSTER_SCRIPT" 'kubectl apply -f deploy/registry/registry-ui.yaml'

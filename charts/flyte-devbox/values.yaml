@@ -23,17 +23,15 @@ flyte-binary:
   enabled: true
   console:
     image:
-      repository: docker.io/unionai-oss/flyteconsole-v2
-      tag: sandbox
-      pullPolicy: Never
+      repository: docker.ops.fzyun.io/unionai-oss/flyteconsole-v2
+      tag: latest
+      pullPolicy: IfNotPresent
   configuration:
-    # CoPilot ships inside the locally-built flyte-binary sandbox image
-    # (at /bin/flyte-copilot), so point the sidecar at it instead of pulling
-    # an external image. The image is loaded into k3s, so IfNotPresent resolves
-    # it without a registry pull.
+    # CoPilot ships inside the same registry-backed flyte-binary image
+    # (at /bin/flyte-copilot), so point the sidecar at the matching release.
     co-pilot:
       image:
-        repository: flyte-binary-v2
+        repository: docker.ops.fzyun.io/flyte-binary-v2
         tag: sandbox
     database:
       postgres:
@@ -109,12 +107,12 @@ flyte-binary:
     inlineConfigMap: '{{ include "flyte-devbox.clusterResourceTemplates.inlineConfigMap" . }}'
   deployment:
     image:
-      repository: flyte-binary-v2
+      repository: docker.ops.fzyun.io/flyte-binary-v2
       tag: sandbox
-      pullPolicy: Never
+      pullPolicy: IfNotPresent
     extraEnvVars:
       - name: AIONE_DOWNLOADER_IMAGE
-        value: aione-downloader:latest
+        value: docker.ops.fzyun.io/aione-downloader:latest
     startupProbe:
       httpGet:
         path: /healthz
@@ -132,9 +130,9 @@ flyte-binary:
       periodSeconds: 1
     waitForDB:
       image:
-        repository: bitnami/postgresql
-        tag: sandbox
-        pullPolicy: Never
+        repository: docker.ops.fzyun.io/library/postgres
+        tag: "17"
+        pullPolicy: IfNotPresent
   rbac:
     # This is strictly NOT RECOMMENDED in production clusters, and is only for use
     # within local Flyte sandboxes.
@@ -164,10 +162,14 @@ rustfs:
     enabled: false
   image:
     initImage:
-      repository: docker.fzyun.io/library/busybox
+      repository: docker.ops.fzyun.io/library/busybox
       tag: stable
-    repository: rustfs/rustfs
-    tag: sandbox
+    repository: docker.ops.fzyun.io/rustfs/rustfs
+    tag: 1.0.0-alpha.94
+    rustfs:
+      repository: docker.ops.fzyun.io/rustfs/rustfs
+      tag: 1.0.0-alpha.94
+      pullPolicy: IfNotPresent
   service:
     type: NodePort
     endpoint:
@@ -213,13 +215,13 @@ sandbox:
   dev: false
   # console runs an in-cluster Flyte console even in dev mode (when the flyte-binary
   # chart is disabled and the manager runs on the host), so http://localhost:30080/v2
-  # keeps working. The image is preloaded into the devbox, hence pullPolicy: Never.
+  # keeps working.
   console:
     enabled: true
     image:
-      repository: docker.io/unionai-oss/flyteconsole-v2
-      tag: sandbox
-      pullPolicy: Never
+      repository: docker.ops.fzyun.io/unionai-oss/flyteconsole-v2
+      tag: latest
+      pullPolicy: IfNotPresent
     containerPort: 8080
     basePath: /v2
     service:

@@ -6,11 +6,18 @@ REMOTE_DIR="${REMOTE_DIR:-/opt/aiops-flyte2}"
 REMOTE_BRANCH="${REMOTE_BRANCH:-main}"
 NAMESPACE="${NAMESPACE:-flyte}"
 RELEASE="${RELEASE:-flyte-devbox}"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-flyte-binary-v2}"
-DOWNLOADER_IMAGE_REPOSITORY="${DOWNLOADER_IMAGE_REPOSITORY:-aione-downloader}"
+PUBLIC_REGISTRY="${PUBLIC_REGISTRY:-docker.ops.fzyun.io}"
+REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/flyte-binary-v2}"
+DOWNLOADER_IMAGE_REPOSITORY="${DOWNLOADER_IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/aione-downloader}"
+POSTGRES_IMAGE_REPOSITORY="${POSTGRES_IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/library/postgres}"
+CONSOLE_IMAGE_REPOSITORY="${CONSOLE_IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/unionai-oss/flyteconsole-v2}"
+RUSTFS_IMAGE_REPOSITORY="${RUSTFS_IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/rustfs/rustfs}"
+BUSYBOX_IMAGE_REPOSITORY="${BUSYBOX_IMAGE_REPOSITORY:-${PUBLIC_REGISTRY}/library/busybox}"
 IMAGE_TAG_PREFIX="${IMAGE_TAG_PREFIX:-main-}"
 IMAGE_TAG_KEEP="${IMAGE_TAG_KEEP:-3}"
 IMAGE_TAG="${IMAGE_TAG:-${IMAGE_TAG_PREFIX}$(git rev-parse --short HEAD)}"
+DOWNLOADER_IMAGE_TAG="${DOWNLOADER_IMAGE_TAG:-$IMAGE_TAG}"
 EXPECTED_COMMIT="${EXPECTED_COMMIT:-$(git rev-parse HEAD)}"
 NERDCTL_VERSION="${NERDCTL_VERSION:-2.3.3}"
 PROXY_URL="${PROXY_URL:-}"
@@ -22,15 +29,22 @@ shell_quote() {
 }
 
 remote_env() {
-  printf "REMOTE_HOST=%s REMOTE_DIR=%s REMOTE_BRANCH=%s NAMESPACE=%s RELEASE=%s IMAGE_REPOSITORY=%s DOWNLOADER_IMAGE_REPOSITORY=%s IMAGE_TAG=%s IMAGE_TAG_PREFIX=%s IMAGE_TAG_KEEP=%s EXPECTED_COMMIT=%s NERDCTL_VERSION=%s PROXY_URL=%s KUBECONFIG_PATH=%s" \
+  printf "REMOTE_HOST=%s REMOTE_DIR=%s REMOTE_BRANCH=%s NAMESPACE=%s RELEASE=%s PUBLIC_REGISTRY=%s REGISTRY_BACKEND=%s IMAGE_REPOSITORY=%s DOWNLOADER_IMAGE_REPOSITORY=%s POSTGRES_IMAGE_REPOSITORY=%s CONSOLE_IMAGE_REPOSITORY=%s RUSTFS_IMAGE_REPOSITORY=%s BUSYBOX_IMAGE_REPOSITORY=%s IMAGE_TAG=%s DOWNLOADER_IMAGE_TAG=%s IMAGE_TAG_PREFIX=%s IMAGE_TAG_KEEP=%s EXPECTED_COMMIT=%s NERDCTL_VERSION=%s PROXY_URL=%s KUBECONFIG_PATH=%s" \
     "$(shell_quote "$REMOTE_HOST")" \
     "$(shell_quote "$REMOTE_DIR")" \
     "$(shell_quote "$REMOTE_BRANCH")" \
     "$(shell_quote "$NAMESPACE")" \
     "$(shell_quote "$RELEASE")" \
+    "$(shell_quote "$PUBLIC_REGISTRY")" \
+    "$(shell_quote "$REGISTRY_BACKEND")" \
     "$(shell_quote "$IMAGE_REPOSITORY")" \
     "$(shell_quote "$DOWNLOADER_IMAGE_REPOSITORY")" \
+    "$(shell_quote "$POSTGRES_IMAGE_REPOSITORY")" \
+    "$(shell_quote "$CONSOLE_IMAGE_REPOSITORY")" \
+    "$(shell_quote "$RUSTFS_IMAGE_REPOSITORY")" \
+    "$(shell_quote "$BUSYBOX_IMAGE_REPOSITORY")" \
     "$(shell_quote "$IMAGE_TAG")" \
+    "$(shell_quote "$DOWNLOADER_IMAGE_TAG")" \
     "$(shell_quote "$IMAGE_TAG_PREFIX")" \
     "$(shell_quote "$IMAGE_TAG_KEEP")" \
     "$(shell_quote "$EXPECTED_COMMIT")" \
@@ -294,7 +308,16 @@ downloader_build_args=(
   --build-arg NO_PROXY="$NO_PROXY"
   --build-arg no_proxy="$NO_PROXY"
 )
-"${NERDCTL[@]}" build "${downloader_build_args[@]}" -t "${DOWNLOADER_IMAGE_REPOSITORY}:latest" -f flyteplugins/aione/downloader/Dockerfile flyteplugins/aione/downloader
+"${NERDCTL[@]}" build "${downloader_build_args[@]}" \
+  -t "${DOWNLOADER_IMAGE_REPOSITORY}:${DOWNLOADER_IMAGE_TAG}" \
+  -t "${DOWNLOADER_IMAGE_REPOSITORY}:latest" \
+  -f flyteplugins/aione/downloader/Dockerfile flyteplugins/aione/downloader
+
+PUBLIC_REGISTRY="$PUBLIC_REGISTRY" REGISTRY_BACKEND="$REGISTRY_BACKEND" \
+  bash scripts/registry/push-local-images.sh \
+    "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
+    "${DOWNLOADER_IMAGE_REPOSITORY}:${DOWNLOADER_IMAGE_TAG}" \
+    "${DOWNLOADER_IMAGE_REPOSITORY}:latest"
 
 prune_old_release_images() {
   if [[ "$IMAGE_TAG" != "$IMAGE_TAG_PREFIX"* ]]; then
@@ -372,10 +395,10 @@ pull_containerd_image rancher/mirrored-coredns-coredns:1.14.3
 pull_containerd_image rancher/local-path-provisioner:v0.0.36
 pull_containerd_image rancher/mirrored-library-busybox:1.37.0 || printf 'Optional image unavailable: %s\n' 'rancher/mirrored-library-busybox:1.37.0'
 pull_containerd_image rancher/mirrored-library-traefik:3.6.13
-pull_containerd_image postgres:17
-pull_containerd_image ghcr.io/unionai-oss/flyteconsole-v2:latest
-pull_containerd_image rustfs/rustfs:1.0.0-alpha.94
-pull_containerd_image busybox:stable
+pull_containerd_image "${POSTGRES_IMAGE_REPOSITORY}:17"
+pull_containerd_image "${CONSOLE_IMAGE_REPOSITORY}:latest"
+pull_containerd_image "${RUSTFS_IMAGE_REPOSITORY}:1.0.0-alpha.94"
+pull_containerd_image "${BUSYBOX_IMAGE_REPOSITORY}:stable"
 
 kubectl -n kube-system rollout status deploy/coredns --timeout=5m
 kubectl -n kube-system rollout status deploy/local-path-provisioner --timeout=5m
@@ -424,8 +447,8 @@ spec:
     spec:
       containers:
         - name: postgresql
-          image: postgres:17
-          imagePullPolicy: Never
+          image: ${POSTGRES_IMAGE_REPOSITORY}:17
+          imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_USER
               value: postgres
@@ -463,17 +486,23 @@ helm upgrade --install "$RELEASE" charts/flyte-devbox \
   --set flyte-binary.configuration.co-pilot.image.tag="$IMAGE_TAG" \
   --set flyte-binary.deployment.image.repository="$IMAGE_REPOSITORY" \
   --set flyte-binary.deployment.image.tag="$IMAGE_TAG" \
-  --set flyte-binary.deployment.image.pullPolicy=Never \
+  --set flyte-binary.deployment.image.pullPolicy=IfNotPresent \
   --set flyte-binary.deployment.extraEnvVars[0].name=AIONE_DOWNLOADER_IMAGE \
-  --set flyte-binary.deployment.extraEnvVars[0].value="${DOWNLOADER_IMAGE_REPOSITORY}:latest" \
-  --set flyte-binary.deployment.waitForDB.image.repository=postgres \
+  --set flyte-binary.deployment.extraEnvVars[0].value="${DOWNLOADER_IMAGE_REPOSITORY}:${DOWNLOADER_IMAGE_TAG}" \
+  --set flyte-binary.deployment.waitForDB.image.repository="$POSTGRES_IMAGE_REPOSITORY" \
   --set-string flyte-binary.deployment.waitForDB.image.tag=17 \
-  --set flyte-binary.deployment.waitForDB.image.pullPolicy=Never \
-  --set flyte-binary.console.image.repository=ghcr.io/unionai-oss/flyteconsole-v2 \
+  --set flyte-binary.deployment.waitForDB.image.pullPolicy=IfNotPresent \
+  --set flyte-binary.console.image.repository="$CONSOLE_IMAGE_REPOSITORY" \
   --set flyte-binary.console.image.tag=latest \
-  --set flyte-binary.console.image.pullPolicy=Never \
-  --set rustfs.image.repository=rustfs/rustfs \
-  --set rustfs.image.tag=1.0.0-alpha.94
+  --set flyte-binary.console.image.pullPolicy=IfNotPresent \
+  --set rustfs.image.repository="$RUSTFS_IMAGE_REPOSITORY" \
+  --set rustfs.image.tag=1.0.0-alpha.94 \
+  --set rustfs.image.rustfs.repository="$RUSTFS_IMAGE_REPOSITORY" \
+  --set rustfs.image.rustfs.tag=1.0.0-alpha.94 \
+  --set rustfs.image.rustfs.pullPolicy=IfNotPresent \
+  --set rustfs.image.initImage.repository="$BUSYBOX_IMAGE_REPOSITORY" \
+  --set rustfs.image.initImage.tag=stable \
+  --set rustfs.image.initImage.pullPolicy=IfNotPresent
 
 kubectl -n "$NAMESPACE" rollout status deploy/flyte-binary-console --timeout=5m
 kubectl -n "$NAMESPACE" rollout status deploy/rustfs --timeout=5m

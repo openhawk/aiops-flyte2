@@ -425,7 +425,7 @@ func TestBuildResourcesAddsCodeRepositoryDownloader(t *testing.T) {
 	initContainer := podSpec.InitContainers[0]
 	assert.Equal(t, "code-downloader", initContainer.Name)
 	assert.Equal(t, "aione-downloader:main-abc1234", initContainer.Image)
-	assert.Equal(t, corev1.PullNever, initContainer.ImagePullPolicy)
+	assert.Equal(t, corev1.PullIfNotPresent, initContainer.ImagePullPolicy)
 	assert.Equal(t, "AIONE_PARAMS", initContainer.Env[0].Name)
 	assert.True(t, hasEmptyDirVolume(podSpec.Volumes, "code-repository-0"))
 	assert.True(t, hasVolumeMount(initContainer.VolumeMounts, "code-repository-0", "/home/flytekit/aione"))

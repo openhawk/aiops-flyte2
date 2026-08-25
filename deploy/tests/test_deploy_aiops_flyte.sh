@@ -13,7 +13,10 @@ fi
 short_head="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
 full_head="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 output="$(
-  env -u IMAGE_TAG -u IMAGE_TAG_PREFIX -u IMAGE_TAG_KEEP -u REMOTE_DIR -u REMOTE_BRANCH \
+  env -u PUBLIC_REGISTRY -u REGISTRY_BACKEND -u IMAGE_REPOSITORY -u DOWNLOADER_IMAGE_REPOSITORY \
+    -u POSTGRES_IMAGE_REPOSITORY -u CONSOLE_IMAGE_REPOSITORY -u RUSTFS_IMAGE_REPOSITORY \
+    -u BUSYBOX_IMAGE_REPOSITORY -u IMAGE_TAG -u DOWNLOADER_IMAGE_TAG -u IMAGE_TAG_PREFIX \
+    -u IMAGE_TAG_KEEP -u REMOTE_DIR -u REMOTE_BRANCH \
     DRY_RUN=1 REMOTE_HOST=aione-flyte2 PROXY_URL=http://172.19.210.24:7890 \
     KUBECONFIG_PATH=/root/.kube/flyte-cluster.yaml \
     bash "$SCRIPT"
@@ -83,9 +86,15 @@ assert_contains '--hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d'
 assert_contains '"${NERDCTL[@]}" build "${build_proxy_args[@]}" -t "${IMAGE_REPOSITORY}:${IMAGE_TAG}" -f Dockerfile .'
 assert_contains '--build-arg HTTP_PROXY='
 assert_contains '--build-arg HTTPS_PROXY='
-assert_contains '"${NERDCTL[@]}" build "${downloader_build_args[@]}" -t "${DOWNLOADER_IMAGE_REPOSITORY}:latest" -f flyteplugins/aione/downloader/Dockerfile flyteplugins/aione/downloader'
-assert_contains "IMAGE_REPOSITORY='flyte-binary-v2'"
-assert_contains "DOWNLOADER_IMAGE_REPOSITORY='aione-downloader'"
+assert_contains '-t "${DOWNLOADER_IMAGE_REPOSITORY}:${DOWNLOADER_IMAGE_TAG}"'
+assert_contains '-t "${DOWNLOADER_IMAGE_REPOSITORY}:latest"'
+assert_contains 'bash scripts/registry/push-local-images.sh'
+assert_contains '"${IMAGE_REPOSITORY}:${IMAGE_TAG}"'
+assert_contains '"${DOWNLOADER_IMAGE_REPOSITORY}:${DOWNLOADER_IMAGE_TAG}"'
+assert_contains "IMAGE_REPOSITORY='docker.ops.fzyun.io/flyte-binary-v2'"
+assert_contains "DOWNLOADER_IMAGE_REPOSITORY='docker.ops.fzyun.io/aione-downloader'"
+assert_contains "POSTGRES_IMAGE_REPOSITORY='docker.ops.fzyun.io/library/postgres'"
+assert_contains "CONSOLE_IMAGE_REPOSITORY='docker.ops.fzyun.io/unionai-oss/flyteconsole-v2'"
 assert_contains "IMAGE_TAG='main-${short_head}'"
 assert_contains "IMAGE_TAG_PREFIX='main-'"
 assert_contains "IMAGE_TAG_KEEP='3'"
@@ -103,7 +112,7 @@ assert_not_contains 'delete pod -l k8s-app=kube-dns'
 assert_not_contains 'delete pod -l app=local-path-provisioner'
 assert_not_contains 'rollout restart deploy/traefik'
 assert_contains 'chown -R 10001:10001 /var/lib/flyte/storage/rustfs'
-assert_contains 'pull_containerd_image postgres:17'
+assert_contains 'pull_containerd_image "${POSTGRES_IMAGE_REPOSITORY}:17"'
 assert_contains 'CREATE DATABASE runs'
 assert_contains 'kubectl -n "$NAMESPACE" rollout status deploy/postgresql'
 assert_contains 'if ! helm dependency update charts/flyte-devbox; then'
@@ -114,8 +123,12 @@ assert_contains '--set docker-registry.enabled=false'
 assert_contains '--set flyte-binary.configuration.co-pilot.image.repository="$IMAGE_REPOSITORY"'
 assert_contains '--set flyte-binary.configuration.co-pilot.image.tag="$IMAGE_TAG"'
 assert_contains '--set flyte-binary.deployment.extraEnvVars[0].name=AIONE_DOWNLOADER_IMAGE'
-assert_contains '--set flyte-binary.deployment.extraEnvVars[0].value="${DOWNLOADER_IMAGE_REPOSITORY}:latest"'
-assert_contains '--set flyte-binary.console.image.repository=ghcr.io/unionai-oss/flyteconsole-v2'
+assert_contains '--set flyte-binary.deployment.image.pullPolicy=IfNotPresent'
+assert_contains '--set flyte-binary.deployment.extraEnvVars[0].value="${DOWNLOADER_IMAGE_REPOSITORY}:${DOWNLOADER_IMAGE_TAG}"'
+assert_contains '--set flyte-binary.deployment.waitForDB.image.pullPolicy=IfNotPresent'
+assert_contains '--set flyte-binary.console.image.repository="$CONSOLE_IMAGE_REPOSITORY"'
+assert_contains '--set flyte-binary.console.image.pullPolicy=IfNotPresent'
+assert_contains '--set rustfs.image.rustfs.repository="$RUSTFS_IMAGE_REPOSITORY"'
 assert_not_contains 'knative-serving.enabled'
 assert_contains 'kubectl -n "$NAMESPACE" rollout status deploy/flyte-binary-console'
 assert_contains 'kubectl -n "$NAMESPACE" rollout status deploy/rustfs'

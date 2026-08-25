@@ -136,7 +136,7 @@ func BuildResources(identity TrainingIdentity, cfg TrainingConfig) (TrainingReso
 		initContainers = append(initContainers, corev1.Container{
 			Name:            "code-downloader",
 			Image:           aionedownloader.Image(cfg.DownloaderImage),
-			ImagePullPolicy: corev1.PullNever,
+			ImagePullPolicy: corev1.PullIfNotPresent,
 			Env:             []corev1.EnvVar{aionedownloader.EnvVar(secretName)},
 			VolumeMounts:    volumeMounts,
 		})
@@ -180,7 +180,7 @@ func BuildResources(identity TrainingIdentity, cfg TrainingConfig) (TrainingReso
 		initContainers = append(initContainers, corev1.Container{
 			Name:            "dataset-downloader",
 			Image:           aionedownloader.Image(cfg.DownloaderImage),
-			ImagePullPolicy: corev1.PullNever,
+			ImagePullPolicy: corev1.PullIfNotPresent,
 			Env:             []corev1.EnvVar{aionedownloader.EnvVar(secretName)},
 			VolumeMounts:    volumeMounts,
 		})

@@ -8,17 +8,21 @@ REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
 IMAGE_LIST="${IMAGE_LIST:-$ROOT_DIR/deploy/registry/images.txt}"
 PROXY_URL="${PROXY_URL:-}"
 FORCE_SYNC="${FORCE_SYNC:-0}"
+LOCK_FILE="${LOCK_FILE:-/tmp/aiops-registry-write.lock}"
 
 if [[ ! -r "$IMAGE_LIST" ]]; then
   printf 'registry image list is not readable: %s\n' "$IMAGE_LIST" >&2
   exit 1
 fi
-for command_name in kubectl skopeo; do
+for command_name in flock kubectl skopeo; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'required command is unavailable: %s\n' "$command_name" >&2
     exit 1
   fi
 done
+
+exec 9>"$LOCK_FILE"
+flock 9
 
 if [[ -n "$PROXY_URL" ]]; then
   export HTTP_PROXY="$PROXY_URL"
