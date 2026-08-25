@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NAMESPACE="${NAMESPACE:-registry-system}"
+REGISTRY_NAMESPACE="${REGISTRY_NAMESPACE:-registry-system}"
 DEPLOYMENT="${DEPLOYMENT:-registry}"
 PUBLIC_REGISTRY="${PUBLIC_REGISTRY:-docker.ops.fzyun.io}"
 REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
@@ -30,9 +30,9 @@ flock 9
 
 switch_config() {
   local config_map="$1"
-  kubectl -n "$NAMESPACE" patch deployment "$DEPLOYMENT" --type=strategic \
+  kubectl -n "$REGISTRY_NAMESPACE" patch deployment "$DEPLOYMENT" --type=strategic \
     -p "{\"spec\":{\"template\":{\"spec\":{\"volumes\":[{\"name\":\"config\",\"configMap\":{\"name\":\"$config_map\"}}]}}}}"
-  kubectl -n "$NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=180s
+  kubectl -n "$REGISTRY_NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=180s
 }
 
 restore_read_only() {
