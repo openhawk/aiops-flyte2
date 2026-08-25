@@ -45,6 +45,18 @@ restore_read_only() {
   exit "$status"
 }
 
+verify_public_image() {
+  local public_ref="$1"
+  local attempt
+  for attempt in {1..30}; do
+    if skopeo inspect "docker://$public_ref" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  skopeo inspect "docker://$public_ref" >/dev/null
+}
+
 NERDCTL=(
   sudo /usr/local/bin/nerdctl
   --address "$CONTAINERD_ADDRESS"
@@ -76,6 +88,6 @@ switch_config registry-config-ro
 trap - EXIT
 
 for public_ref in "$@"; do
-  skopeo inspect "docker://$public_ref" >/dev/null
+  verify_public_image "$public_ref"
 done
 printf 'Pushed %d images and restored read-only mode.\n' "$#"
