@@ -6,6 +6,7 @@ EXPECTED_COMMIT="${EXPECTED_COMMIT:-}"
 STAGE="${STAGE:-all}"
 NAMESPACE="${NAMESPACE:-registry-system}"
 REGISTRY_BACKEND="${REGISTRY_BACKEND:-172.19.66.224:30000}"
+UI_BACKEND="${UI_BACKEND:-172.19.66.224:30001}"
 PROXY_URL="${PROXY_URL:-}"
 REGISTRY_SOURCE="docker.fzyun.io/library/registry:3.1.1"
 REGISTRY_DIGEST="sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33"
@@ -62,8 +63,18 @@ apply_registry() {
   NAMESPACE="$NAMESPACE" REGISTRY_BACKEND="$REGISTRY_BACKEND" PROXY_URL="$PROXY_URL" \
     bash scripts/registry/sync-images.sh
 
+  kubectl apply -f deploy/registry/registry-ui.yaml
+  kubectl -n "$NAMESPACE" rollout status deployment/registry-ui --timeout=300s
+  for attempt in {1..30}; do
+    if curl -fsS --connect-timeout 3 "http://$UI_BACKEND/" | grep -qi '<html'; then
+      break
+    fi
+    sleep 2
+  done
+  curl -fsS --connect-timeout 5 "http://$UI_BACKEND/" | grep -qi '<html'
+
   curl -fsS --connect-timeout 5 "http://$REGISTRY_BACKEND/v2/" >/dev/null
-  kubectl -n "$NAMESPACE" get deployment,pod,service,pvc -o wide
+  kubectl -n "$NAMESPACE" get deployment,pod,service,pvc,pdb -o wide
 }
 
 case "$STAGE" in

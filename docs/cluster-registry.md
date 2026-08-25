@@ -8,11 +8,17 @@ namespace or the `flyte-devbox` Helm release.
 
 - Public pull endpoint: `https://docker.ops.fzyun.io`
 - Cluster NodePort backend: `http://172.19.66.224:30000`
+- Joxit UI backend: `http://172.19.66.224:30001`
 - Legacy registry, retained for existing images: `http://docker.ops.fzyun.io:5000`
 
 HAProxy on `aiops-haproxy` terminates the public TLS certificate and routes the
-`docker.ops.fzyun.io` host on port 443 to the cluster NodePort. Port 5000 is not
-changed by this deployment.
+`docker.ops.fzyun.io` `/v2` path to the Registry NodePort and all other paths to
+the Joxit UI NodePort. Port 5000 is not changed by this deployment.
+
+The UI runs as two stateless `joxit/docker-registry-ui:2.6.0` replicas in
+`registry-system`. It is configured for a single Registry with image deletion
+disabled. The Registry remains the source of truth and stays read-only outside
+the controlled synchronization window.
 
 ## Deployment
 
@@ -38,6 +44,7 @@ not attempt to copy unrelated multi-architecture attestation manifests.
 
 ```bash
 kubectl -n registry-system get deployment,pod,service,pvc -o wide
+curl -fsS https://docker.ops.fzyun.io/ | grep -i '<html'
 curl -fsS https://docker.ops.fzyun.io/v2/
 curl -fsS http://docker.ops.fzyun.io:5000/v2/
 sudo k3s crictl pull registry.k8s.io/nfd/node-feature-discovery:v0.18.3
@@ -51,3 +58,7 @@ Each node's previous registry configuration is stored under
 node at a time. Scale the `registry-system/registry` Deployment to zero if the
 new backend must be disabled; retain the PVC so mirrored images remain
 recoverable.
+
+The Joxit UI has no persistent data. To roll it back independently, restore the
+HAProxy backup and scale `registry-system/registry-ui` to zero. The Registry API
+and PVC are unaffected.

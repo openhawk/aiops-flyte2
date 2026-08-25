@@ -3,7 +3,8 @@ set -euo pipefail
 
 CONFIG=/opt/haproxy/haproxy.cfg
 BACKUP_DIR=/opt/haproxy/backups
-BACKEND_URL="${BACKEND_URL:-http://172.19.66.224:30000/v2/}"
+REGISTRY_BACKEND_URL="${REGISTRY_BACKEND_URL:-http://172.19.66.224:30000/v2/}"
+UI_BACKEND_URL="${UI_BACKEND_URL:-http://172.19.66.224:30001/}"
 CANDIDATE="$(mktemp)"
 BACKUP=""
 switched=0
@@ -20,7 +21,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-curl -fsS --connect-timeout 5 "$BACKEND_URL" >/dev/null
+curl -fsS --connect-timeout 5 "$REGISTRY_BACKEND_URL" >/dev/null
+curl -fsS --connect-timeout 5 "$UI_BACKEND_URL" | grep -qi '<html'
 sudo test -r "$CONFIG"
 sudo mkdir -p "$BACKUP_DIR"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -36,7 +38,9 @@ sudo awk '
   /^[[:space:]]*default_backend[[:space:]]+aione_flyte2_ingress/ && !acl_added {
     print "    # BEGIN AIOPS CLUSTER REGISTRY ACL"
     print "    acl host_docker_ops hdr(host) -i docker.ops.fzyun.io"
-    print "    use_backend cluster_registry if host_docker_ops"
+    print "    acl path_docker_registry_api path_beg -i /v2"
+    print "    use_backend cluster_registry_api if host_docker_ops path_docker_registry_api"
+    print "    use_backend cluster_registry_ui if host_docker_ops"
     print "    # END AIOPS CLUSTER REGISTRY ACL"
     print ""
     acl_added=1
@@ -46,13 +50,21 @@ sudo awk '
     if (!acl_added) exit 42
     print ""
     print "# BEGIN AIOPS CLUSTER REGISTRY BACKEND"
-    print "backend cluster_registry"
+    print "backend cluster_registry_api"
     print "    mode http"
     print "    option httpchk GET /v2/"
     print "    http-check expect status 200"
     print "    timeout connect 5s"
     print "    timeout server 1h"
     print "    server k3s_registry 172.19.66.224:30000 check"
+    print ""
+    print "backend cluster_registry_ui"
+    print "    mode http"
+    print "    option httpchk GET /"
+    print "    http-check expect status 200"
+    print "    timeout connect 5s"
+    print "    timeout server 60s"
+    print "    server k3s_registry_ui 172.19.66.224:30001 check"
     print "# END AIOPS CLUSTER REGISTRY BACKEND"
   }
 ' "$CONFIG" >"$CANDIDATE"
@@ -73,6 +85,7 @@ for attempt in {1..30}; do
   sleep 2
 done
 curl -fsS --connect-timeout 5 https://docker.ops.fzyun.io/v2/ >/dev/null
+curl -fsS --connect-timeout 5 https://docker.ops.fzyun.io/ | grep -qi '<html'
 curl -fsS --connect-timeout 5 http://docker.ops.fzyun.io:5000/v2/ >/dev/null
-printf 'HAProxy now routes docker.ops.fzyun.io:443 to the cluster registry. Backup: %s\n' "$BACKUP"
+printf 'HAProxy routes /v2 to the Registry API and all other paths to Joxit UI. Backup: %s\n' "$BACKUP"
 switched=0

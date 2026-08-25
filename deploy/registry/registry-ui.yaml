@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-ui
+  namespace: registry-system
+  labels:
+    app.kubernetes.io/name: registry-ui
+    app.kubernetes.io/part-of: cluster-registry
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry-ui
+  namespace: registry-system
+  labels:
+    app.kubernetes.io/name: registry-ui
+    app.kubernetes.io/part-of: cluster-registry
+    app.kubernetes.io/version: 2.6.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: registry-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: registry-ui
+        app.kubernetes.io/part-of: cluster-registry
+        app.kubernetes.io/version: 2.6.0
+    spec:
+      serviceAccountName: registry-ui
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: aiops.fzyun.io/registry-host
+                    operator: In
+                    values:
+                      - "true"
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: registry-ui
+                topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: aiops.fzyun.io/hostname
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: registry-ui
+          image: docker.ops.fzyun.io/joxit/docker-registry-ui:2.6.0@sha256:db27f52b9a1b2ac295b507cafe6953a6d5b244b8cf8edfbbd9a998f02bffa9ca
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SINGLE_REGISTRY
+              value: "true"
+            - name: REGISTRY_URL
+              value: https://docker.ops.fzyun.io
+            - name: PULL_URL
+              value: docker.ops.fzyun.io
+            - name: REGISTRY_TITLE
+              value: FZYun Cluster Registry
+            - name: DELETE_IMAGES
+              value: "false"
+            - name: SHOW_CONTENT_DIGEST
+              value: "true"
+            - name: SHOW_CATALOG_NB_TAGS
+              value: "true"
+            - name: CATALOG_ELEMENTS_LIMIT
+              value: "1000"
+            - name: REGISTRY_SECURED
+              value: "false"
+            - name: THEME
+              value: auto
+            - name: ENABLE_VERSION_NOTIFICATION
+              value: "false"
+            - name: NGINX_LISTEN_PORT
+              value: "8080"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-ui
+  namespace: registry-system
+  labels:
+    app.kubernetes.io/name: registry-ui
+    app.kubernetes.io/part-of: cluster-registry
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: registry-ui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30001
+      protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: registry-ui
+  namespace: registry-system
+  labels:
+    app.kubernetes.io/name: registry-ui
+    app.kubernetes.io/part-of: cluster-registry
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: registry-ui
